@@ -1,0 +1,584 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vigicrues - Meurthe-et-Moselle</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  color: #233447;
+}
+
+header {
+  background: #164e78;
+  color: white;
+  text-align: center;
+  padding: 24px 12px;
+}
+
+header h1 { margin: 0 0 8px; }
+
+main {
+  max-width: 1700px;
+  margin: auto;
+  padding: 18px;
+}
+
+.commandes {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f1f5f9;
+  padding: 12px 0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button, select {
+  padding: 12px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: white;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+button.actif {
+  background: #164e78;
+  color: white;
+  border-color: #164e78;
+}
+
+#etat {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 10px 0 20px;
+}
+
+.secteur { margin-bottom: 18px; }
+
+.secteur h2 {
+  background: white;
+  border-left: 5px solid #1685bd;
+  padding: 9px 11px;
+  font-size: 18px;
+}
+
+.grille {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.carte {
+  background: white;
+  border: 1px solid #d9e2ec;
+  border-radius: 9px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.carte h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.code {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.graphique {
+  width: 100%;
+  height: 180px;
+  display: block;
+  margin-top: 10px;
+}
+
+.message {
+  font-size: 13px;
+  color: #64748b;
+  min-height: 20px;
+  line-height: 1.5;
+}
+
+.lien {
+  color: #075985;
+  font-size: 13px;
+}
+
+footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+}
+
+@media (max-width: 1000px) {
+  .grille { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  main { padding: 10px; }
+  .grille { grid-template-columns: 1fr; }
+  .graphique { height: 170px; }
+  header h1 { font-size: 22px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Surveillance des cours d'eau</h1>
+  <div>Meurthe-et-Moselle — Données hydrologiques</div>
+</header>
+
+<main>
+  <div class="commandes">
+    <button id="btnH" class="actif" onclick="changerMode('H')">
+      Hauteurs d'eau (m)
+    </button>
+    <button id="btnQ" onclick="changerMode('Q')">
+      Débits (m³/s)
+    </button>
+    <button onclick="chargerTout()">Actualiser les données ↻</button>
+  </div>
+
+  <div id="etat">
+    Chargement des observations hydrologiques...
+  </div>
+
+  <div id="contenu"></div>
+</main>
+
+<footer>
+  Source des données : API Hub'Eau — Hydrométrie
+  <br>
+  Les observations sont des données brutes susceptibles d'être provisoires.
+  <br>
+  <a href="https://www.vigicrues.gouv.fr/" target="_blank" rel="noopener">
+    Site officiel Vigicrues
+  </a>
+</footer>
+
+<script>
+const API =
+  "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr";
+
+const secteurs = [
+  {
+    nom: "Secteur Longwy",
+    id: "longwy",
+    stations: [
+      ["B400101001", "Station 1"],
+      ["B402101001", "Station 2"],
+      ["B403101001", "Station 3"],
+      ["B413201001", "Station 4"]
+    ]
+  },
+  {
+    nom: "Secteur Briey",
+    id: "briey",
+    stations: [
+      ["A830020101", "Station 1"],
+      ["A831030001", "Station 2"],
+      ["A832201001", "Station 3"]
+    ]
+  },
+  {
+    nom: "Secteur Jarny",
+    id: "jarny",
+    stations: [
+      ["A820101001", "Station 1"],
+      ["A807101001", "Station 2"],
+      ["A812020101", "Station 3"],
+      ["A812200001", "Station 4"]
+    ]
+  },
+  {
+    nom: "Secteur PAM-Pompey",
+    id: "pam",
+    stations: [
+      ["A735201001", "Station 1"],
+      ["A712201001", "Station 2"],
+      ["A701061001", "Station 3"]
+    ]
+  },
+  {
+    nom: "Secteur Toul-Neuves-Maisons",
+    id: "toul",
+    stations: [
+      ["A573061001", "Station 1"],
+      ["A550061001", "Station 2"],
+      ["A543101001", "Station 3"]
+    ]
+  },
+  {
+    nom: "Secteur Nancy",
+    id: "nancy",
+    stations: [
+      ["A694102001", "Station 1"],
+      ["A692101001", "Station 2"],
+      ["A687201001", "Station 3"],
+      ["A687201001", "Station 4"]
+    ]
+  },
+  {
+    nom: "Secteur Lunéville-Blâmont",
+    id: "luneville",
+    stations: [
+      ["A634101001", "Station 1"],
+      ["A657111001", "Station 2"],
+      ["A654111001", "Station 3"],
+      ["A673122001", "Station 4"],
+      ["A643112001", "Station 5"],
+      ["A631101001", "Station 6"]
+    ]
+  }
+];
+
+let mode = "H";
+let generation = 0;
+
+async function chargerNomsStations() {
+  const API_REFERENTIEL =
+    "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations";
+
+  const stations = secteurs.flatMap(secteur =>
+    secteur.stations.map(station => ({ secteur, station }))
+  );
+
+  await Promise.all(stations.map(async ({ secteur, station }) => {
+    const [code] = station;
+    try {
+      const params = new URLSearchParams({ code_station: code, format: "json", size: "1" });
+      const reponse = await fetch(API_REFERENTIEL + "?" + params.toString());
+      if (!reponse.ok) return;
+      const json = await reponse.json();
+      const info = (json.data || [])[0];
+      const nom = info && (info.libelle_station || info.libelle_site_hydro || info.nom_cours_eau);
+      if (nom) {
+        station[1] = nom;
+        const index = secteur.stations.indexOf(station);
+        const titre = document.querySelector("#graph-" + secteur.id + "-" + index)
+          ?.closest(".carte")?.querySelector("h3");
+        if (titre) titre.textContent = nom;
+      }
+    } catch (erreur) {
+      console.warn("Nom officiel indisponible pour la station " + code, erreur);
+    }
+  }));
+}
+
+function creerPage() {
+  const contenu = document.getElementById("contenu");
+  contenu.innerHTML = "";
+
+  secteurs.forEach(secteur => {
+    const section = document.createElement("section");
+    section.className = "secteur";
+    section.id = secteur.id;
+
+    const titre = document.createElement("h2");
+    titre.textContent = secteur.nom;
+    section.appendChild(titre);
+
+    const grille = document.createElement("div");
+    grille.className = "grille";
+
+    secteur.stations.forEach(([code, nom], index) => {
+      const carte = document.createElement("article");
+      carte.className = "carte";
+
+      const titreStation = document.createElement("h3");
+      titreStation.textContent = nom;
+
+      const codeStation = document.createElement("div");
+      codeStation.className = "code";
+      codeStation.textContent = "Code station : " + code;
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "graphique";
+      canvas.id = "graph-" + secteur.id + "-" + index;
+
+      const message = document.createElement("div");
+      message.className = "message";
+      message.id = "msg-" + secteur.id + "-" + index;
+      message.textContent = "En attente des données...";
+
+      const lien = document.createElement("a");
+      lien.className = "lien";
+      lien.href = "https://www.vigicrues.gouv.fr/station/" +
+        code + "/H/7";
+      lien.target = "_blank";
+      lien.rel = "noopener";
+      lien.textContent = "Ouvrir la station sur Vigicrues ↗";
+
+      carte.append(
+        titreStation, codeStation, canvas, message, lien
+      );
+      grille.appendChild(carte);
+    });
+
+    section.appendChild(grille);
+    contenu.appendChild(section);
+  });
+}
+
+function changerMode(nouveauMode) {
+  mode = nouveauMode;
+
+  document.getElementById("btnH")
+    .classList.toggle("actif", mode === "H");
+  document.getElementById("btnQ")
+    .classList.toggle("actif", mode === "Q");
+
+  document.querySelectorAll(".lien").forEach(lien => {
+    const code = lien.closest(".carte")
+      .querySelector(".code").textContent
+      .replace("Code station : ", "");
+
+    lien.href = "https://www.vigicrues.gouv.fr/station/" +
+      code + (mode === "H" ? "/H/7" : "/Q/7");
+  });
+
+  chargerTout();
+}
+
+async function chargerStation(code, canvas, message, token) {
+  const grandeur = mode;
+  message.textContent = "Récupération des observations...";
+
+  const params = new URLSearchParams({
+    code_entite: code,
+    grandeur_hydro: grandeur,
+    size: "200",
+    sort: "desc"
+  });
+
+  try {
+    const reponse = await fetch(API + "?" + params.toString());
+
+    if (!reponse.ok) {
+      throw new Error("Réponse HTTP " + reponse.status);
+    }
+
+    const json = await reponse.json();
+
+    if (token !== generation) return;
+
+    const observations = (json.data || [])
+      .filter(d =>
+        d.date_obs &&
+        d.resultat_obs !== null &&
+        Number.isFinite(Number(d.resultat_obs))
+      )
+      .map(d => ({
+        date: new Date(d.date_obs),
+        valeur: Number(d.resultat_obs)
+      }))
+      .filter(d => !isNaN(d.date.getTime()))
+      .sort((a, b) => a.date - b.date);
+
+    if (!observations.length) {
+      dessiner(canvas, []);
+      message.textContent =
+        "Aucune observation disponible pour cette grandeur.";
+      return;
+    }
+
+    // Hub'Eau exprime les hauteurs en millimètres
+    // et les débits en litres par seconde.
+    const facteur = grandeur === "H" ? 1000 : 1000;
+    const valeurs = observations.map(d => ({
+      date: d.date,
+      valeur: d.valeur / facteur
+    }));
+
+    dessiner(canvas, valeurs);
+
+    const derniere = valeurs[valeurs.length - 1];
+    const unite = grandeur === "H" ? "m" : "m³/s";
+
+    message.textContent =
+      "Dernière observation reçue : " +
+      derniere.date.toLocaleString("fr-FR") +
+      " — " + derniere.valeur.toLocaleString("fr-FR", {
+        maximumFractionDigits: 3
+      }) + " " + unite +
+      ". " + valeurs.length + " points affichés.";
+
+  } catch (erreur) {
+    if (token !== generation) return;
+
+    dessiner(canvas, []);
+    message.textContent =
+      "Données indisponibles. Vérifiez la connexion ou réessayez.";
+    console.error("Erreur station " + code, erreur);
+  }
+}
+
+function dessiner(canvas, donnees) {
+  const largeur = Math.max(280, canvas.clientWidth || 500);
+  const hauteur = canvas.clientHeight || 250;
+  const ratio = window.devicePixelRatio || 1;
+
+  canvas.width = largeur * ratio;
+  canvas.height = hauteur * ratio;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0, 0, largeur, hauteur);
+
+  const marge = { gauche: 58, droite: 12, haut: 15, bas: 38 };
+  const w = largeur - marge.gauche - marge.droite;
+  const h = hauteur - marge.haut - marge.bas;
+
+  ctx.font = "11px Arial";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#64748b";
+
+  if (!donnees.length) {
+    ctx.fillText("Aucune donnée à afficher",
+      largeur / 2, hauteur / 2);
+    return;
+  }
+
+  const valeurs = donnees.map(d => d.valeur);
+  let min = Math.min(...valeurs);
+  let max = Math.max(...valeurs);
+
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+
+  const margeValeur = (max - min) * 0.12;
+  min -= margeValeur;
+  max += margeValeur;
+
+  const x = i => marge.gauche +
+    (donnees.length === 1 ? 0.5 : i / (donnees.length - 1)) * w;
+  const y = v => marge.haut + (max - v) / (max - min) * h;
+
+  // Grille horizontale et graduations
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.textAlign = "right";
+
+  for (let i = 0; i <= 4; i++) {
+    const valeur = min + (max - min) * i / 4;
+    const py = y(valeur);
+
+    ctx.beginPath();
+    ctx.moveTo(marge.gauche, py);
+    ctx.lineTo(largeur - marge.droite, py);
+    ctx.stroke();
+
+    ctx.fillStyle = "#64748b";
+    ctx.fillText(valeur.toLocaleString("fr-FR", {
+      maximumFractionDigits: 3
+    }), marge.gauche - 7, py + 4);
+  }
+
+  // Courbe
+  ctx.beginPath();
+  ctx.strokeStyle = mode === "H" ? "#1685bd" : "#15966b";
+  ctx.lineWidth = 2;
+
+  donnees.forEach((d, i) => {
+    if (i === 0) ctx.moveTo(x(i), y(d.valeur));
+    else ctx.lineTo(x(i), y(d.valeur));
+  });
+
+  ctx.stroke();
+
+  // Dates aux extrémités
+  ctx.fillStyle = "#64748b";
+  ctx.textAlign = "left";
+  ctx.fillText(
+    donnees[0].date.toLocaleDateString("fr-FR"),
+    marge.gauche, hauteur - 12
+  );
+
+  ctx.textAlign = "right";
+  ctx.fillText(
+    donnees[donnees.length - 1].date.toLocaleDateString("fr-FR"),
+    largeur - marge.droite, hauteur - 12
+  );
+}
+
+async function chargerTout() {
+  const token = ++generation;
+  const grandeur = mode === "H" ? "hauteurs" : "débits";
+
+  document.getElementById("etat").textContent =
+    "Chargement des " + grandeur +
+    " depuis l'API hydrométrique officielle...";
+
+  const taches = [];
+
+  secteurs.forEach(secteur => {
+    secteur.stations.forEach(([code], index) => {
+      const canvas = document.getElementById(
+        "graph-" + secteur.id + "-" + index
+      );
+      const message = document.getElementById(
+        "msg-" + secteur.id + "-" + index
+      );
+
+      taches.push({ code, canvas, message });
+    });
+  });
+
+  let terminees = 0;
+  let erreurs = 0;
+
+  // Limite le nombre de requêtes simultanées.
+  for (let i = 0; i < taches.length; i += 4) {
+    if (token !== generation) return;
+
+    const lot = taches.slice(i, i + 4);
+
+    await Promise.all(lot.map(async t => {
+      await chargerStation(t.code, t.canvas, t.message, token);
+      if (token === generation) {
+        terminees++;
+        if (t.message.textContent.startsWith("Données indisponibles")) {
+          erreurs++;
+        }
+        document.getElementById("etat").textContent =
+          terminees + " / " + taches.length +
+          " stations traitées. " +
+          (erreurs ? erreurs + " indisponible(s)." : "");
+      }
+    }));
+  }
+
+  if (token === generation) {
+    document.getElementById("etat").textContent +=
+      " — Mise à jour terminée.";
+  }
+}
+
+creerPage();
+chargerNomsStations();
+chargerTout();
+
+// Redessine les courbes lors d'un changement de taille d'écran.
+window.addEventListener("resize", () => {
+  chargerTout();
+});
+</script>
+
+</body>
+</html>
